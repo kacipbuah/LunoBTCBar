@@ -40,8 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isFetching = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem.button?.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        statusItem.button?.title = "₿ …"
+        setTitle(symbol: "₿", symbolColor: .systemOrange, text: "…")
         buildMenu()
 
         let timer = Timer(timeInterval: refreshInterval, repeats: true) { [weak self] _ in
@@ -111,7 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func show(_ ticker: Ticker) {
         let price = Self.ringgit(ticker.lastTrade, decimals: 0)
         lastPriceText = price
-        statusItem.button?.title = "₿ \(price)"
+        setTitle(symbol: "₿", symbolColor: .systemOrange, text: price)
         lastItem.title = "Last: \(Self.ringgit(ticker.lastTrade, decimals: 2))"
         bidItem.title = "Bid: \(Self.ringgit(ticker.bid, decimals: 2))"
         askItem.title = "Ask: \(Self.ringgit(ticker.ask, decimals: 2))"
@@ -121,8 +120,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Keeps the last good price on screen, flagged as stale, rather than blanking it.
     private func showFailure(_ error: Error) {
-        statusItem.button?.title = "⚠︎ \(lastPriceText ?? "BTC")"
+        setTitle(symbol: "⚠︎", symbolColor: .labelColor, text: lastPriceText ?? "BTC")
         statusLine.title = "Failed \(Self.time.string(from: Date())): \(error.localizedDescription)"
+    }
+
+    private func setTitle(symbol: String, symbolColor: NSColor, text: String) {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        let title = NSMutableAttributedString(
+            string: symbol,
+            attributes: [.font: font, .foregroundColor: symbolColor])
+        title.append(NSAttributedString(
+            string: " \(text)",
+            attributes: [.font: font, .foregroundColor: NSColor.labelColor]))
+        statusItem.button?.attributedTitle = title
     }
 
     private func updateLoginState() {
