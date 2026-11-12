@@ -8,6 +8,7 @@ RM293,281 ↓3.9 ↑0.2
 
 - `↓` (red) is how far the price sits below today's high, in percent
 - `↑` (green) is how far it sits above today's low, in percent
+- The price itself turns green in the top 10% of today's range and red in the bottom 10%, once the range is at least 1% wide
 - "Today" starts at 00:00 Malaysia time
 
 Luno's public ticker has no high or low, so the app pages through the public [trades endpoint](https://api.luno.com/api/1/trades?pair=XBTMYR) from midnight and keeps the day's open, high and low in `~/Library/Application Support/LunoBTCBar/day.json`. The range is exact from the first launch, including moves while the Mac was asleep or the app wasn't running. A busy day takes about 25 requests on first launch, then one or two per refresh.

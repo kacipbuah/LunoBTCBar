@@ -241,11 +241,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private static let titleFont = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
 
+    /// The price is green in the top 10% of today's range and red in the bottom 10%.
+    private var zoneColor: NSColor {
+        switch zone {
+        case .extremeHigh, .high: return .systemGreen
+        case .extremeLow, .low: return Self.softRed
+        case .neutral: return .labelColor
+        }
+    }
+
     /// Menu bar title: `RM293,281 ↓3.9 ↑0.2`, with the distance from today's high in red
-    /// and from today's low in green. The price dims while blinking.
+    /// and from today's low in green. A blink alternates the price between its zone colour
+    /// and the plain label colour.
     private func renderPrice() {
         guard let price = lastPrice else { return }
-        let priceColor = blinkDimmed ? NSColor.labelColor.withAlphaComponent(0.25) : .labelColor
+        let priceColor = blinkDimmed ? NSColor.labelColor : zoneColor
         let title = NSMutableAttributedString(
             string: "RM\(Self.compact(price))",
             attributes: [.font: Self.titleFont, .foregroundColor: priceColor])
