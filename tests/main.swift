@@ -11,71 +11,93 @@ func check(_ condition: Bool, _ name: String, line: Int = #line) {
 
 let start = Date(timeIntervalSince1970: 1_800_000_000)
 
-/// A history with one reading a minute for `minutes` minutes, spanning low...high.
-func history(minutes: Int, low: Double, high: Double) -> PriceHistory {
-    var result = PriceHistory()
-    for minute in 0..<minutes {
-        let price = minute % 2 == 0 ? low : high
-        result.record(price: price, at: start.addingTimeInterval(Double(minute) * 60))
-    }
-    return result
+let dayStart = DayRange.dayStart(for: start)
+
+func trade(_ secondsAfterMidnight: Int64, _ price: Double) -> Trade {
+    Trade(timestamp: dayStart + secondsAfterMidnight * 1000, price: String(price))
 }
 
-let afterSixHours = start.addingTimeInterval(360 * 60)
-
-// Range and zones
+// Midnight is in Malaysia time
 do {
-    let h = history(minutes: 360, low: 300_000, high: 310_000)
-    check(h.low == 300_000, "low is lowest recorded price")
-    check(h.high == 310_000, "high is highest recorded price")
-    check(h.zone(for: 309_600) == .extremeHigh, "top 5% is extreme high")
-    check(h.zone(for: 309_200) == .high, "top 5-10% is high")
-    check(h.zone(for: 305_000) == .neutral, "middle is neutral")
-    check(h.zone(for: 300_800) == .low, "bottom 5-10% is low")
-    check(h.zone(for: 300_400) == .extremeLow, "bottom 5% is extreme low")
-    check(h.zone(for: 309_500) == .extremeHigh, "exactly 95% is extreme high")
-    check(h.zone(for: 300_500) == .extremeLow, "exactly 5% is extreme low")
+    let formatter = DateFormatter()
+    formatter.timeZone = DayRange.timeZone
+    formatter.dateFormat = "HH:mm:ss"
+    let midnight = Date(timeIntervalSince1970: Double(dayStart) / 1000)
+    check(formatter.string(from: midnight) == "00:00:00", "day starts at 00:00 MYT")
+    check(dayStart <= Int64(start.timeIntervalSince1970 * 1000), "day start is not in the future")
+    check(Int64(start.timeIntervalSince1970 * 1000) - dayStart < 86_400_000, "day start is within 24 hours")
 }
 
-// Not enough data means no colour
+// Open, high and low from trades, in any order
 do {
-    check(history(minutes: 359, low: 300_000, high: 310_000).zone(for: 309_900) == .neutral,
-          "under 6 hours of readings is neutral")
-    check(history(minutes: 360, low: 300_000, high: 302_000).zone(for: 301_990) == .neutral,
-          "range under 1% is neutral")
-    check(PriceHistory().zone(for: 300_000) == .neutral, "empty history is neutral")
+    var d = DayRange(dayStart: dayStart)
+    let more = d.apply([trade(300, 305_000), trade(60, 300_000), trade(600, 310_000), trade(900, 295_000)])
+    check(!more, "a short page means no more pages")
+    check(d.open == 300_000, "open is the earliest trade")
+    check(d.high == 310_000 && d.highAt == dayStart + 600_000, "high and its time")
+    check(d.low == 295_000 && d.lowAt == dayStart + 900_000, "low and its time")
+    check(d.since == dayStart + 900_001, "next page starts after the newest trade")
 }
 
-// Sleep gaps don't count as recorded time
+// Paging
 do {
-    var h = PriceHistory()
-    h.record(price: 300_000, at: start)
-    h.record(price: 310_000, at: start.addingTimeInterval(7 * 3600))
-    check(!h.isReady(for: 310_000), "two readings 7 hours apart are not 6 hours of data")
+    var d = DayRange(dayStart: dayStart)
+    let page = (0..<100).map { trade(Int64($0), 300_000 + Double($0)) }
+    check(d.apply(page), "a full page means more may follow")
+    check(!d.apply([]), "an empty page stops")
+    check(d.since == dayStart + 99_001, "an empty page keeps since")
 }
 
-// Rolling 24 hour window
+// Trades from before midnight are ignored
 do {
-    var h = history(minutes: 360, low: 300_000, high: 310_000)
-    h.record(price: 305_000, at: start.addingTimeInterval(31 * 3600))
-    check(h.low == 305_000 && h.high == 305_000, "readings older than 24 hours are dropped")
+    var d = DayRange(dayStart: dayStart)
+    _ = d.apply([Trade(timestamp: dayStart - 1, price: "999999"), trade(10, 300_000)])
+    check(d.high == 300_000 && d.open == 300_000, "yesterday's trade does not count")
 }
 
-// Readings in the same minute merge
+// Percentages
 do {
-    var h = PriceHistory()
-    h.record(price: 300_000, at: start)
-    h.record(price: 310_000, at: start.addingTimeInterval(15))
-    h.record(price: 290_000, at: start.addingTimeInterval(30))
-    check(h.bucketCount == 1, "same minute uses one bucket")
-    check(h.low == 290_000 && h.high == 310_000, "bucket keeps low and high")
+    var d = DayRange(dayStart: dayStart)
+    _ = d.apply([trade(1, 300_000), trade(2, 310_000), trade(3, 290_000)])
+    let below = d.percentBelowHigh(300_000)!
+    check(abs(below - 3.2258) < 0.001, "percent below high is relative to the high")
+    check(abs(d.percentAboveLow(300_000)! - 3.4483) < 0.001, "percent above low is relative to the low")
+    check(d.percentBelowHigh(310_000) == 0, "at the high is 0 below")
+    check(d.percentAboveLow(290_000) == 0, "at the low is 0 above")
+    check(abs(d.percentFromOpen(303_000)! - 1.0) < 0.0001, "change from open")
+    check(DayRange(dayStart: dayStart).percentBelowHigh(300_000) == nil, "empty range has no percent")
+}
+
+// Ticker readings extend the range
+do {
+    var d = DayRange(dayStart: dayStart)
+    _ = d.apply([trade(1, 300_000)])
+    d.record(price: 312_000, at: dayStart + 5_000)
+    check(d.high == 312_000 && d.highAt == dayStart + 5_000, "ticker price can set a new high")
+    check(d.since == dayStart + 1_001, "ticker readings do not move since")
+}
+
+// Zones
+do {
+    var d = DayRange(dayStart: dayStart)
+    _ = d.apply([trade(1, 300_000), trade(2, 310_000)])
+    check(d.zone(for: 309_600) == .extremeHigh, "top 5% is extreme high")
+    check(d.zone(for: 309_200) == .high, "top 5-10% is high")
+    check(d.zone(for: 305_000) == .neutral, "middle is neutral")
+    check(d.zone(for: 300_800) == .low, "bottom 5-10% is low")
+    check(d.zone(for: 300_400) == .extremeLow, "bottom 5% is extreme low")
+
+    var narrow = DayRange(dayStart: dayStart)
+    _ = narrow.apply([trade(1, 300_000), trade(2, 302_000)])
+    check(narrow.zone(for: 301_990) == .neutral, "range under 1% is neutral")
 }
 
 // Persistence
 do {
-    let h = history(minutes: 3, low: 300_000, high: 310_000)
-    let decoded = try! JSONDecoder().decode(PriceHistory.self, from: JSONEncoder().encode(h))
-    check(decoded == h, "history survives encode and decode")
+    var d = DayRange(dayStart: dayStart)
+    _ = d.apply([trade(1, 300_000), trade(2, 310_000)])
+    let decoded = try! JSONDecoder().decode(DayRange.self, from: JSONEncoder().encode(d))
+    check(decoded == d, "day range survives encode and decode")
 }
 
 // Blink policy

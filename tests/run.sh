@@ -5,5 +5,5 @@ cd "$(dirname "$0")/.."
 
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
-swiftc -swift-version 5 -o "$OUT/tests" PriceHistory.swift tests/main.swift
+swiftc -swift-version 5 -o "$OUT/tests" DayRange.swift tests/main.swift
 "$OUT/tests"
