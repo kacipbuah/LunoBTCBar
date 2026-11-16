@@ -9,7 +9,7 @@ DEST="$HOME/Applications/LunoBTCBar.app"
 rm -rf build
 mkdir -p "$APP/Contents/MacOS"
 cp Info.plist "$APP/Contents/Info.plist"
-swiftc -O -swift-version 5 -o "$APP/Contents/MacOS/LunoBTCBar" main.swift DayRange.swift
+swiftc -O -swift-version 5 -o "$APP/Contents/MacOS/LunoBTCBar" main.swift DayRange.swift USMarket.swift
 codesign --force --sign - "$APP"
 
 pkill -x LunoBTCBar || true

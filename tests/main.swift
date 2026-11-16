@@ -139,6 +139,40 @@ do {
           "no new high means no blink")
 }
 
+// US market session times in Malaysia time
+do {
+    let iso = ISO8601DateFormatter()
+    func myt(_ s: String) -> Date { iso.date(from: s + "+08:00")! }
+
+    // Monday 16 Nov 2026, EST: open 22:30 MYT, close 05:00 MYT next day.
+    let s = USMarket.session(on: myt("2026-11-16T23:00:00"))
+    check(s?.open == myt("2026-11-16T22:30:00"), "winter open is 22:30 MYT")
+    check(s?.close == myt("2026-11-17T05:00:00"), "winter close is 05:00 MYT")
+
+    // EDT in July: open 21:30 MYT.
+    check(USMarket.session(on: myt("2026-07-15T22:00:00"))?.open == myt("2026-07-15T21:30:00"),
+          "summer open is 21:30 MYT")
+
+    check(USMarket.session(on: myt("2026-11-21T23:00:00")) == nil, "no session on Saturday")
+    check(USMarket.session(on: myt("2026-11-26T23:00:00")) == nil, "no session on Thanksgiving")
+    check(USMarket.session(on: myt("2026-11-27T23:00:00"))?.close == myt("2026-11-28T02:00:00"),
+          "early close at 13:00 ET")
+
+    check(USMarket.dueAlert(now: myt("2026-11-16T22:19:00"), lastAlerted: nil) == nil, "11 minutes before: not yet")
+    let due = USMarket.dueAlert(now: myt("2026-11-16T22:20:30"), lastAlerted: nil)
+    check(due == USMarket.Event(kind: .open, date: myt("2026-11-16T22:30:00")), "10 minutes before open warns")
+    check(USMarket.dueAlert(now: myt("2026-11-16T22:25:00"), lastAlerted: due?.date) == nil, "warns once")
+    check(USMarket.dueAlert(now: myt("2026-11-17T04:29:00"), lastAlerted: due?.date) == nil,
+          "31 minutes before close: not yet")
+    check(USMarket.dueAlert(now: myt("2026-11-17T04:30:30"), lastAlerted: due?.date)?.kind == .close,
+          "30 minutes before close warns")
+    check(USMarket.dueAlert(now: myt("2026-11-16T22:31:00"), lastAlerted: nil) == nil, "no warning after open")
+
+    // Friday close, then next event is Monday open.
+    check(USMarket.nextEvent(after: myt("2026-11-21T06:00:00")) == USMarket.Event(kind: .open, date: myt("2026-11-23T22:30:00")),
+          "after Friday close the next event is Monday open")
+}
+
 if failures == 0 {
     print("All tests passed")
 } else {

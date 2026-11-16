@@ -8,6 +8,7 @@ private let tradeURL = URL(string: "https://www.luno.com/trade/markets/XBTMYR")!
 private let refreshInterval: TimeInterval = 15
 private let blinkDuration: TimeInterval = 30
 private let blinkAlertsKey = "blinkAlerts"
+private let marketAlertsKey = "usMarketAlerts"
 /// Upper bound on trade pages per refresh; a busy day needs about 30 on first launch.
 private let maxTradePages = 80
 
@@ -47,6 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let rangeItem = NSMenuItem(title: "Range: —", action: nil, keyEquivalent: "")
     private let blinkItem = NSMenuItem(title: "Blink Alerts", action: #selector(toggleBlink), keyEquivalent: "")
     private let loginItem = NSMenuItem(title: "Start at Login", action: #selector(toggleLogin), keyEquivalent: "")
+    private let marketItem = NSMenuItem(title: "US market: —", action: nil, keyEquivalent: "")
+    private let marketAlertItem = NSMenuItem(title: "US Market Alerts", action: #selector(toggleMarketAlerts), keyEquivalent: "")
+    private var lastMarketAlert: Date?
+    private var marketAlertShowing = false
     private let logger = Logger(subsystem: "com.izwan.LunoBTCBar", category: "Price")
 
     private var lastPrice: Double?
@@ -61,13 +66,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var blinkDimmed = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        UserDefaults.standard.register(defaults: [blinkAlertsKey: true])
+        UserDefaults.standard.register(defaults: [blinkAlertsKey: true, marketAlertsKey: true])
         statusItem.button?.attributedTitle = NSAttributedString(
             string: "RM …", attributes: [.font: Self.titleFont])
         buildMenu()
 
         let timer = Timer(timeInterval: refreshInterval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refresh() }
+            MainActor.assumeIsolated {
+                self?.refresh()
+                self?.checkMarket()
+            }
         }
         timer.tolerance = 2
         RunLoop.main.add(timer, forMode: .common)
@@ -77,8 +85,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(refresh),
             name: NSWorkspace.didWakeNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(checkMarket),
+            name: NSWorkspace.didWakeNotification, object: nil)
 
         refresh()
+        checkMarket()
     }
 
     private func buildMenu() {
@@ -100,12 +112,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(item)
         }
         menu.addItem(.separator())
+        marketItem.isEnabled = false
+        menu.addItem(marketItem)
+        menu.addItem(.separator())
 
         menu.addItem(actionItem("Refresh Now", #selector(refresh), key: "r"))
         menu.addItem(actionItem("Open Luno", #selector(openLuno), key: "o"))
         blinkItem.target = self
         blinkItem.state = blinkAlertsEnabled ? .on : .off
         menu.addItem(blinkItem)
+        marketAlertItem.target = self
+        marketAlertItem.state = marketAlertsEnabled ? .on : .off
+        menu.addItem(marketAlertItem)
         loginItem.target = self
         menu.addItem(loginItem)
         menu.addItem(.separator())
@@ -313,6 +331,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.set(enabled, forKey: blinkAlertsKey)
         blinkItem.state = enabled ? .on : .off
     }
+
+    private var marketAlertsEnabled: Bool {
+        UserDefaults.standard.bool(forKey: marketAlertsKey)
+    }
+
+    @objc private func toggleMarketAlerts() {
+        let enabled = !marketAlertsEnabled
+        UserDefaults.standard.set(enabled, forKey: marketAlertsKey)
+        marketAlertItem.state = enabled ? .on : .off
+    }
+
+    /// Updates the next-event menu line and shows a message box 10 minutes before
+    /// the NYSE opens and 30 minutes before it closes.
+    @objc private func checkMarket() {
+        let now = Date()
+        if let next = USMarket.nextEvent(after: now) {
+            let minutes = Int(next.date.timeIntervalSince(now) / 60)
+            let wait = minutes >= 60 ? "\(minutes / 60)j \(minutes % 60)m" : "\(minutes)m"
+            let day = Calendar.current.isDateInToday(next.date) ? "" : Self.weekday.string(from: next.date) + " "
+            marketItem.title = "US market \(next.kind == .open ? "open" : "close"): \(day)\(Self.hourMinuteLocal.string(from: next.date)) (\(wait) lagi)"
+        } else {
+            marketItem.title = "US market: —"
+        }
+
+        guard marketAlertsEnabled, !marketAlertShowing,
+              let event = USMarket.dueAlert(now: now, lastAlerted: lastMarketAlert) else { return }
+        lastMarketAlert = event.date
+        marketAlertShowing = true
+        defer { marketAlertShowing = false }
+
+        let minutes = max(1, Int((event.date.timeIntervalSince(now) / 60).rounded()))
+        let alert = NSAlert()
+        alert.messageText = event.kind == .open
+            ? "US market buka \(minutes) minit lagi"
+            : "US market tutup \(minutes) minit lagi"
+        let price = lastPrice.map { "Harga sekarang RM\(Self.compact($0)). " } ?? ""
+        alert.informativeText = "NYSE \(event.kind == .open ? "open" : "close") pukul \(Self.hourMinuteLocal.string(from: event.date)). \(price)Selalu ada volatiliti BTC masa ni."
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Open Luno")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.window.level = .floating
+        if alert.runModal() == .alertSecondButtonReturn {
+            openLuno()
+        }
+    }
+
+    private static let hourMinuteLocal: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        formatter.timeZone = DayRange.timeZone
+        return formatter
+    }()
+
+    private static let weekday: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE"
+        formatter.timeZone = DayRange.timeZone
+        return formatter
+    }()
 
     private static var dayURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
