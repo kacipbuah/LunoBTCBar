@@ -91,6 +91,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         refresh()
         checkMarket()
+
+        // `open LunoBTCBar.app --args --test-market-alert` previews the close warning.
+        if CommandLine.arguments.contains("--test-market-alert") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                let now = Date()
+                self?.presentMarketAlert(
+                    USMarket.Event(kind: .close, date: now.addingTimeInterval(USMarket.leadTime(for: .close))), now: now)
+            }
+        }
     }
 
     private func buildMenu() {
@@ -358,6 +367,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard marketAlertsEnabled, !marketAlertShowing,
               let event = USMarket.dueAlert(now: now, lastAlerted: lastMarketAlert) else { return }
         lastMarketAlert = event.date
+        presentMarketAlert(event, now: now)
+    }
+
+    private func presentMarketAlert(_ event: USMarket.Event, now: Date) {
         marketAlertShowing = true
         defer { marketAlertShowing = false }
 
