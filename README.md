@@ -54,3 +54,27 @@ mkdir -p ~/SwiftBar && cp swiftbar/luno-btc.30s.py ~/SwiftBar/
 ```
 
 Then point SwiftBar's plugin folder at `~/SwiftBar`. Uses `/usr/bin/python3` with no extra packages.
+
+## iPhone widget (Scriptable)
+
+`ios/luno-btc-widget.js` shows the same thing as a widget on iPhone or iPad, using the free [Scriptable](https://scriptable.app) app.
+
+```
+₿ RM293,281
+↓3.9  ↑0.2
+H 305,120  L 292,700
+```
+
+- Home Screen (small or medium) and Lock Screen (inline or rectangular) widgets
+- Same day range as the app: trades from 00:00 MYT, kept in Scriptable's documents folder
+- The price turns green in the top 10% of today's range and red in the bottom 10%, once the range is at least 1% wide
+- `…` means today's trades are still being read (a busy day can take a few refreshes on first run), and `⚠︎` means the last fetch failed and the last price is shown
+- Tapping the widget opens Luno's BTC/MYR market
+- iOS decides how often widgets refresh, usually every 5 to 15 minutes, so this is a glance rather than a live ticker
+
+Install:
+
+1. Install Scriptable from the App Store
+2. Create a new script, paste in `ios/luno-btc-widget.js` and name it `Luno BTC`
+3. Run it once in the app to load today's range
+4. Add a Scriptable widget to the Home Screen or Lock Screen, edit it and pick `Luno BTC` as the script
