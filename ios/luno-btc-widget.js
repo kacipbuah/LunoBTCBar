@@ -154,7 +154,7 @@ function priceColor(n) {
 function build(s, stale, family) {
   const w = new ListWidget()
   w.url = TRADE_URL
-  w.refreshAfterDate = new Date(Date.now() + 5 * 60 * 1000)
+  w.refreshAfterDate = new Date(Date.now() + 60 * 1000) // a request; iOS decides when
   // ⚠︎ = fetch failed, showing the last price; … = still catching up on today's trades
   const warn = stale ? " ⚠︎" : s.partial ? " …" : ""
 
@@ -178,26 +178,56 @@ function build(s, stale, family) {
   }
 
   const small = family !== "medium" && family !== "large"
-  w.setPadding(12, 12, 12, 12)
+  w.setPadding(12, 14, 12, 14)
 
   const head = w.addStack()
-  text(head, "₿", Font.boldSystemFont(13), ORANGE)
+  head.centerAlignContent()
+  text(head, "₿", Font.boldSystemFont(14), ORANGE)
   head.addSpacer(4)
-  text(head, `BTC/MYR${warn}`, Font.mediumSystemFont(12), GREY)
+  text(head, `BTC/MYR${warn}`, Font.mediumSystemFont(13), GREY)
   head.addSpacer()
-  text(head, hhmm(s.lastAt), Font.regularMonospacedSystemFont(11), GREY)
-  w.addSpacer(4)
-
-  text(w, `RM${fmt(n.price)}`, Font.boldMonospacedSystemFont(small ? 20 : 26), priceColor(n))
-  arrows(w, n, small ? 14 : 16)
+  text(head, hhmm(s.lastAt), Font.regularMonospacedSystemFont(12), GREY)
   w.addSpacer()
 
+  text(w, `RM${fmt(n.price)}`, Font.boldMonospacedSystemFont(small ? 26 : 32), priceColor(n))
+  arrows(w, n, small ? 17 : 19)
+  w.addSpacer()
+
+  const bar = w.addImage(rangeBar(s, n, small ? 140 : 300))
+  bar.imageSize = new Size(small ? 140 : 300, 10)
+  w.addSpacer(6)
+
   const sign = n.change >= 0 ? "+" : ""
-  const detail = Font.regularMonospacedSystemFont(small ? 10 : 12)
-  text(w, `Open ${fmt(s.open)} ${sign}${n.change.toFixed(2)}%`, detail, n.change >= 0 ? GREEN : RED)
-  text(w, `H ${fmt(s.high)} @${hhmm(s.highAt)}`, detail, GREY)
-  text(w, `L ${fmt(s.low)} @${hhmm(s.lowAt)}`, detail, GREY)
+  const detail = Font.mediumMonospacedSystemFont(small ? 13 : 14)
+  text(w, `O ${fmt(s.open)} ${sign}${n.change.toFixed(2)}%`, detail, n.change >= 0 ? GREEN : RED)
+  text(w, `H ${fmt(s.high)} ${hhmm(s.highAt)}`, detail)
+  text(w, `L ${fmt(s.low)} ${hhmm(s.lowAt)}`, detail)
   return w
+}
+
+// Today's range as a bar from low to high, filled up to the price, with a dot on the price.
+function rangeBar(s, n, width) {
+  const h = 10, track = 4
+  const dc = new DrawContext()
+  dc.size = new Size(width, h)
+  dc.opaque = false
+  dc.respectScreenScale = true
+  const pos = s.high > s.low ? Math.min(1, Math.max(0, (n.price - s.low) / (s.high - s.low))) : 0.5
+  const y = (h - track) / 2
+  const pill = (x, w, color) => {
+    const path = new Path()
+    path.addRoundedRect(new Rect(x, y, w, track), track / 2, track / 2)
+    dc.addPath(path)
+    dc.setFillColor(color)
+    dc.fillPath()
+  }
+  pill(0, width, new Color("#ffffff", 0.18))
+  const fill = priceColor(n) || ORANGE
+  const x = h / 2 + pos * (width - h)
+  pill(0, x, fill)
+  dc.setFillColor(Color.white())
+  dc.fillEllipse(new Rect(x - h / 2, 0, h, h))
+  return dc.getImage()
 }
 
 // --- Main -------------------------------------------------------------------------------

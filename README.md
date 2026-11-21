@@ -66,11 +66,12 @@ H 305,120  L 292,700
 ```
 
 - Home Screen (small or medium) and Lock Screen (inline or rectangular) widgets
+- The Home Screen widget adds a bar for today's range, from low to high, with a dot on the price, plus today's open, high and low with their times
 - Same day range as the app: trades from 00:00 MYT, kept in Scriptable's documents folder
 - The price turns green in the top 10% of today's range and red in the bottom 10%, once the range is at least 1% wide
 - `…` means today's trades are still being read (a busy day can take a few refreshes on first run), and `⚠︎` means the last fetch failed and the last price is shown
 - Tapping the widget opens Luno's BTC/MYR market
-- iOS decides how often widgets refresh, usually every 5 to 15 minutes, so this is a glance rather than a live ticker
+- iOS decides how often widgets refresh, usually every few minutes, so this is a glance rather than a live ticker. The time in the corner is when the price was fetched. Running the script in the app fetches the latest price but doesn't redraw the widget
 
 Install:
 
